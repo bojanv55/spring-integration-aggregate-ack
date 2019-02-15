@@ -39,8 +39,9 @@ public class ProgramTests {
         final CountDownLatch messageReceived = new CountDownLatch(uniqueNumbers.size());
 
         container.setMessageListener(message -> {
-            messageReceived.countDown();
-            assertThat(new String(message.getBody())).isEqualTo("sdsd");
+          //  messageReceived.countDown();
+         //   assertThat(new String(message.getBody())).isEqualTo("sdsd");
+            System.out.println(new String(message.getBody()));
         });
         container.setReceiveTimeout(50);
         container.start();
