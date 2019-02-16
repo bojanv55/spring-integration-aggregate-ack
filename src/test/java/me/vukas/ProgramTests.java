@@ -23,6 +23,8 @@ public class ProgramTests {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+    @Autowired
+    private AckingState ackingState;
 
     @Test
     public void rabbitWorks() throws InterruptedException {
@@ -59,6 +61,10 @@ public class ProgramTests {
         assertThat(messageReceived.await(60, TimeUnit.SECONDS)).isTrue();
 
         container.stop();
+
+        ackingState.report();
+
+        assertThat(ackingState.getUnacked()).isEqualTo(0);  //no unacked messages allowed
     }
 
 }

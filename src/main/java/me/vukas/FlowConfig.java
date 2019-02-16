@@ -78,6 +78,7 @@ public class FlowConfig {
     @Bean
     public IntegrationFlow queue1Flow() {
         return IntegrationFlows.from(queue1InboundAdapter())
+                .wireTap(wtChannel())
                 .transform(Transformers.objectToString())
                 .channel(amqpInputChannel())
                 .get();
@@ -86,9 +87,20 @@ public class FlowConfig {
     @Bean
     public IntegrationFlow queue2Flow() {
         return IntegrationFlows.from(queue2InboundAdapter())
+                .wireTap(wtChannel())
                 .transform(Transformers.objectToString())
                 .channel(amqpInputChannel())
                 .get();
+    }
+
+    @Bean
+    public MessageChannel wtChannel() {
+        return new DirectChannel();
+    }
+
+    @ServiceActivator(inputChannel = "wtChannel")
+    public void wtLog(@Header(AmqpHeaders.CHANNEL) Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) Long tag) {
+        ackingState().addMessage(channel.getChannelNumber(), tag);
     }
 
     @Bean
@@ -125,6 +137,11 @@ public class FlowConfig {
     }
 
     @Bean
+    public AckingState ackingState(){
+        return new AckingState();
+    }
+
+    @Bean
     public CorrelationStrategy correlationStrategy() {
         InOutLambdaCorrelationStrategy correlationStrategy = new InOutLambdaCorrelationStrategy();
         Function<String, String> correlator1 = (in) -> aggregator().correlate(in);
@@ -134,7 +151,7 @@ public class FlowConfig {
 
     @Bean
     public MessageGroupProcessor messageProcessor() {
-        InOutLambdaMessageGroupProcessor<StringContainer> processor = new InOutLambdaMessageGroupProcessor<>(StringContainer.class);
+        InOutLambdaMessageGroupProcessor<StringContainer> processor = new InOutLambdaMessageGroupProcessor<>(StringContainer.class, ackingState());
         BiConsumer<StringContainer, String> aggregator1 = (out, in) -> aggregator().aggregate(out, in);
         processor.addConsumer(aggregator1);
         return processor;
@@ -223,6 +240,7 @@ public class FlowConfig {
     @ServiceActivator(inputChannel = "manualNackChannel")
     public void manualNack(@Header(AmqpHeaders.CHANNEL) Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) Long tag, @Payload Object payload) throws IOException {
         channel.basicAck(tag, false);	//since NACK-ing sends to dead-letter, just ACK
+        ackingState().removeMessage(channel.getChannelNumber(), tag);
     }
 
     @ServiceActivator(inputChannel = "manualAckChannel")

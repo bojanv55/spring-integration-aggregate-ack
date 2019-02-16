@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
+import me.vukas.AckingState;
 import net.jodah.typetools.TypeResolver;
 
 import org.slf4j.Logger;
@@ -16,7 +17,8 @@ public class InOutLambdaMessageGroupProcessor<I> extends AbstractManualAckAggreg
 	private Class<I> outType;
 	private Map<Class<?>, BiConsumer<I, Object>> typeToConsumer = new HashMap<>();
 
-	public InOutLambdaMessageGroupProcessor(Class<I> outType) {
+	public InOutLambdaMessageGroupProcessor(Class<I> outType, AckingState ackingState) {
+		super(ackingState);
 		this.outType = outType;
 	}
 
