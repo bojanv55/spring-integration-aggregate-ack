@@ -39,7 +39,7 @@ public class ProgramTests {
         final CountDownLatch messageReceived = new CountDownLatch(uniqueNumbers.size());
 
         container.setMessageListener(message -> {
-          //  messageReceived.countDown();
+            messageReceived.countDown();
          //   assertThat(new String(message.getBody())).isEqualTo("sdsd");
             System.out.println(new String(message.getBody()));
         });
