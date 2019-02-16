@@ -1,5 +1,7 @@
 package me.vukas;
 
+import eu.rekawek.toxiproxy.Proxy;
+import eu.rekawek.toxiproxy.model.ToxicDirection;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.amqp.core.MessageBuilder;
@@ -10,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +28,8 @@ public class ProgramTests {
     private RabbitTemplate rabbitTemplate;
     @Autowired
     private AckingState ackingState;
+    @Autowired
+    private Proxy proxy;
 
     @Test
     public void rabbitWorks() throws InterruptedException {
@@ -56,6 +61,12 @@ public class ProgramTests {
         for(int i=250; i<500; i++){
             String msg = String.valueOf(numbers.get(i));
             rabbitTemplate.send("", "inputQueue2", MessageBuilder.withBody(msg.getBytes()).build());
+        }
+
+        try {
+            proxy.toxics().timeout("timeout", ToxicDirection.DOWNSTREAM, 10000);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
         assertThat(messageReceived.await(60, TimeUnit.SECONDS)).isTrue();

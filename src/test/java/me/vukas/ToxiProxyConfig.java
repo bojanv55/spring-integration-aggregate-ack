@@ -2,6 +2,7 @@ package me.vukas;
 
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
+import eu.rekawek.toxiproxy.model.ToxicDirection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -64,11 +65,12 @@ public class ToxiProxyConfig {
     @Bean
     public Proxy rabbitProxy() throws IOException {
         Proxy proxy = toxiproxyClient().createProxy("rabbit", "0.0.0.0:5673","rabbit:5672");
-        intoxicate(proxy);
+        //intoxicate(proxy);
         return proxy;
     }
 
     private void intoxicate(Proxy proxy) throws IOException {
         //proxy.toxics().getAll().add(new Toxic);
+        //proxy.toxics().timeout("timeout", ToxicDirection.DOWNSTREAM, 10000);
     }
 }
