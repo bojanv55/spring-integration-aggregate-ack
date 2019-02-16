@@ -3,3 +3,5 @@ spring:
     port: 5673
     virtual-host: /
     publisher-confirms: true
+    requested-heartbeat: 15
+    #autorecoveryisfalse
