@@ -1,0 +1,3 @@
+[submodule "toxiproxy-java"]
+	path = toxiproxy-java
+	url = https://github.com/bojanv55/toxiproxy-java.git
