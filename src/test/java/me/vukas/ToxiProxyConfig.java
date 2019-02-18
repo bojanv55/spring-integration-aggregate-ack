@@ -1,9 +1,13 @@
 package me.vukas;
 
+import java.io.IOException;
+
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.DependsOn;
@@ -13,11 +17,12 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
-import java.io.IOException;
-
 @TestConfiguration
 public class ToxiProxyConfig {
     private static final Logger logger = LoggerFactory.getLogger(ToxiProxyConfig.class);
+
+    @Value("${siaa.host}")
+    private String siaaHost;
 
     @Bean
     public Network network(){
@@ -26,8 +31,8 @@ public class ToxiProxyConfig {
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     public GenericContainer rabbitContainer(){
-        return new GenericContainer("rabbitmq:3.7.11-alpine")
-                .withExposedPorts(5672)
+        return new FixedHostPortGenericContainer("rabbitmq:3.7.11-alpine")
+                .withFixedExposedPort(5672, 5672)
                 .withNetwork(network())
                 .withNetworkAliases("rabbit")
                 .waitingFor(Wait.forListeningPort());
@@ -63,7 +68,7 @@ public class ToxiProxyConfig {
      */
     @Bean
     public Proxy rabbitProxy() throws IOException {
-        Proxy proxy = toxiproxyClient().createProxy("rabbit", "0.0.0.0:5673","rabbit:5672");
+        Proxy proxy = toxiproxyClient().createProxy("rabbit", "0.0.0.0:5673",siaaHost+":5672");
         intoxicate(proxy);
         return proxy;
     }

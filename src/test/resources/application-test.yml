@@ -5,3 +5,5 @@ spring:
     publisher-confirms: true
     requested-heartbeat: 15
     #autorecoveryisfalse
+siaa:
+  host: 10.10.121.199
