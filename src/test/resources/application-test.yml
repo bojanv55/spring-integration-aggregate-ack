@@ -6,4 +6,4 @@ spring:
     requested-heartbeat: 15
     #autorecoveryisfalse
 siaa:
-  host: 10.10.121.199
+  host: rabbit #remote docker ip 10.10.121.199

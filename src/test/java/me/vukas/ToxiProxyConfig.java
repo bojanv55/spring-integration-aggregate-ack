@@ -33,6 +33,7 @@ public class ToxiProxyConfig {
     public GenericContainer rabbitContainer(){
         return new FixedHostPortGenericContainer("rabbitmq:3.7.11-alpine")
                 .withFixedExposedPort(5672, 5672)
+                .withExposedPorts(5672)
                 .withNetwork(network())
                 .withNetworkAliases("rabbit")
                 .waitingFor(Wait.forListeningPort());
