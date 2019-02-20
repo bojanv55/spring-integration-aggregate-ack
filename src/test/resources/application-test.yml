@@ -3,7 +3,32 @@ spring:
     port: 5673
     virtual-host: /
     publisher-confirms: true
-    requested-heartbeat: 15
+    publisher-returns: true
+    requested-heartbeat: 30
+    connection-timeout: 30
     #autorecoveryisfalse
+    listener:
+      direct:
+        acknowledge-mode: auto
+        default-requeue-rejected: true
+        prefetch: 100
+
 siaa:
   host: 10.10.121.199 #remote docker ip 10.10.121.199
+
+application:
+  rabbitmq:
+    first:
+      host: 10.10.121.199
+      port: 5673
+      publisher-confirms: true
+      publisher-returns: true
+      requested-heartbeat: 30
+      connection-timeout: 30
+    second:
+      host: 1.1.1.1
+      port: 5675
+      publisher-confirms: false
+      publisher-returns: false
+      requested-heartbeat: 60
+      connection-timeout: 60

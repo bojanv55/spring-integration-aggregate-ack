@@ -1,10 +1,18 @@
 package me.vukas;
 
-import com.rabbitmq.client.Channel;
+import static org.springframework.integration.aggregator.AbstractManualAckAggregatingMessageGroupProcessor.MANUAL_ACK_PAIRS;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
-import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
@@ -15,9 +23,16 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.integration.aggregator.*;
+import org.springframework.integration.aggregator.CorrelationStrategy;
+import org.springframework.integration.aggregator.InOutLambdaCorrelationStrategy;
+import org.springframework.integration.aggregator.InOutLambdaMessageGroupProcessor;
+import org.springframework.integration.aggregator.ManualAckPair;
+import org.springframework.integration.aggregator.MessageGroupProcessor;
+import org.springframework.integration.aggregator.TimeoutCountSequenceSizeReleaseStrategy;
 import org.springframework.integration.amqp.inbound.AmqpInboundChannelAdapter;
-import org.springframework.integration.amqp.outbound.AmqpOutboundEndpoint;
+import org.springframework.integration.amqp.outbound.AmqpOutboundEndpointEnhanced;
+import org.springframework.integration.amqp.support.NackedAmqpMessageException;
+import org.springframework.integration.amqp.support.ReturnedAmqpMessageException;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.integration.channel.DirectChannel;
 import org.springframework.integration.dsl.IntegrationFlow;
@@ -34,22 +49,17 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.support.ErrorMessage;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
-
-import static org.springframework.integration.aggregator.AbstractManualAckAggregatingMessageGroupProcessor.MANUAL_ACK_PAIRS;
+import com.rabbitmq.client.Channel;
 
 @Configuration
 public class FlowConfig {
+    private final org.slf4j.Logger logger = LoggerFactory.getLogger(FlowConfig.class);
+
     @Bean
     public Queue queue1() {
         return QueueBuilder.nonDurable("inputQueue1").build();
@@ -67,6 +77,16 @@ public class FlowConfig {
 
     @Bean
     public MessageChannel manualNackChannel() {
+        return new DirectChannel();
+    }
+
+    @Bean
+    public MessageChannel nackFromPublisherConfirmsChannel(){
+        return new DirectChannel();
+    }
+
+    @Bean
+    public MessageChannel returnFromPublisherChannel(){
         return new DirectChannel();
     }
 
@@ -166,6 +186,7 @@ public class FlowConfig {
     public RabbitTemplate ackTemplate() {
         RabbitTemplate ackTemplate = new RabbitTemplate(connectionFactory);
         ackTemplate.setMessageConverter(jackson2JsonConverter());
+    //    ackTemplate.setMandatory(true);
         return ackTemplate;
     }
 
@@ -184,9 +205,11 @@ public class FlowConfig {
     }
 
     @Bean
-    public AmqpOutboundEndpoint amqpOutboundEndpoint() {
-        AmqpOutboundEndpoint outboundEndpoint = new AmqpOutboundEndpoint(ackTemplate());
+    public AmqpOutboundEndpointEnhanced amqpOutboundEndpoint() {
+        AmqpOutboundEndpointEnhanced outboundEndpoint = new AmqpOutboundEndpointEnhanced(ackTemplate());
         outboundEndpoint.setConfirmAckChannel(manualAckChannel());
+        outboundEndpoint.setConfirmNackChannel(nackFromPublisherConfirmsChannel()); //WE NEED THIS SINCE AGGREGATOR IS ASYNC AND this will not use manualNackChannel
+     //   outboundEndpoint.setReturnChannel(returnFromPublisherChannel());    //cannot route message?
         outboundEndpoint.setConfirmCorrelationExpressionString("#root");
         outboundEndpoint.setExchangeName("outputExchange");
         outboundEndpoint.setRoutingKeyExpression(routingKeyExpression()); //forward using patition id as routing key
@@ -235,6 +258,44 @@ public class FlowConfig {
         adapter.setRecoveryCallback(new ErrorMessageSendingRecoverer(manualNackChannel(), nackStrategy()));
         adapter.setRetryTemplate(retryTemplate());
         return adapter;
+    }
+
+    @ServiceActivator(inputChannel = "nackFromPublisherConfirmsChannel")
+    public void nackFromPublisherConfirms(@Payload Object payload) {
+        if(payload instanceof NackedAmqpMessageException){
+            NackedAmqpMessageException exception = (NackedAmqpMessageException)payload;
+            if(exception.getCorrelationData() instanceof GenericMessage){
+                GenericMessage message = (GenericMessage)exception.getCorrelationData();
+                if(message.getHeaders().containsKey("amqp_manualAckPairs")){
+                    Object objPairs = message.getHeaders().get("amqp_manualAckPairs");
+                    if(objPairs instanceof List) {
+                        List<ManualAckPair> ackPairs = (List)objPairs;
+                        ackPairs.forEach(ManualAckPair::requeue);
+                    }
+                    else{
+                        logger.warn("objPairs is not list. content: " + objPairs);
+                    }
+                }
+                else{
+                    logger.warn("message has no amqp_manualAckPairs");
+                }
+            }
+            else{
+                logger.warn("exception.getCorrelationData() is not Generic message but " + exception.getCorrelationData());
+            }
+        }
+        else{
+            logger.warn("payload is not NackedAmqpMessageException but " + payload);
+        }
+    }
+
+    @ServiceActivator(inputChannel = "returnFromPublisherChannel")
+    public void returnFromPublisherNack(@Payload Object payload) {
+        if(payload instanceof ReturnedAmqpMessageException){
+            ReturnedAmqpMessageException exception = (ReturnedAmqpMessageException)payload;
+            org.springframework.amqp.core.Message message = exception.getAmqpMessage();
+        }
+        int x = 22;
     }
 
     @ServiceActivator(inputChannel = "manualNackChannel")

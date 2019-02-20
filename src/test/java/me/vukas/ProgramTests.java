@@ -1,20 +1,24 @@
 package me.vukas;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
-
-import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = {ToxiProxyConfig.class, RabbitConfig.class})
@@ -25,6 +29,11 @@ public class ProgramTests {
     private RabbitTemplate rabbitTemplate;
     @Autowired
     private AckingState ackingState;
+
+    @Autowired
+    RabbitProperties firstRabbitProperties;
+    @Autowired
+    RabbitProperties secondRabbitProperties;
 
     @Test
     public void rabbitWorks() throws InterruptedException {
@@ -58,7 +67,11 @@ public class ProgramTests {
             rabbitTemplate.send("", "inputQueue2", MessageBuilder.withBody(msg.getBytes()).build());
         }
 
-        assertThat(messageReceived.await(60, TimeUnit.SECONDS)).isTrue();
+//        assertThat(messageReceived.await(30, TimeUnit.SECONDS)).isTrue();
+
+        while(ackingState.getUnacked() != 0) {
+            Thread.sleep(1000);
+        }
 
         container.stop();
 
